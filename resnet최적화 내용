@@ -1,0 +1,99 @@
+
+현재 코드에서 기본 ResNet18에 적용한 주요 최적화들을 정리해드리겠습니다:
+
+## 🔧 **ResNet 최적화 내역**
+
+### **1. 모델 아키텍처 최적화**
+
+**SE Block (Squeeze-and-Excitation) 추가:**
+```python
+class SEBlock(nn.Module):
+    def __init__(self, channel, reduction=16):
+        # 채널 어텐션 메커니즘
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel, bias=False),
+            nn.Sigmoid()
+        )
+```
+
+**BasicBlock에 정규화 추가:**
+```python
+# SE Block 통합
+if self.use_se:
+    out = self.se(out)
+    
+# Dropout 추가 (0.1)
+self.dropout = nn.Dropout(0.1)
+out = self.dropout(out)
+```
+
+**ResNet 전체 개선:**
+```python
+# Adaptive Average Pooling 사용
+self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+# Final layer에 Dropout 추가 (0.5)
+self.dropout = nn.Dropout(0.5)
+```
+
+### **2. 데이터 증강 최적화**
+
+**강화된 Transform:**
+```python
+transforms.RandomApply([transforms.RandomAffine(degrees=0, translate=(0.1, 0.1))], p=0.5)
+transforms.RandomApply([transforms.RandomPerspective(distortion_scale=0.2)], p=0.3)
+transforms.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3))  # 더 강한 RandomErasing
+```
+
+**Mixup 데이터 증강:**
+```python
+def mixup_data(x, y, alpha=1.0):
+    # 두 이미지와 라벨을 혼합
+    mixed_x = lam * x + (1 - lam) * x[index, :]
+```
+
+### **3. 훈련 최적화**
+
+**Label Smoothing:**
+```python
+class LabelSmoothingCrossEntropy(nn.Module):
+    def __init__(self, smoothing=0.1):
+        # 과신뢰 방지
+```
+
+**AdamW 옵티마이저:**
+```python
+optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, 
+                       weight_decay=5e-4, betas=(0.9, 0.999))
+```
+
+**Warmup + Cosine Annealing 스케줄러:**
+```python
+class WarmupCosineScheduler:
+    # 초기 5에포크 웜업 → 코사인 스케줄링
+```
+
+### **4. 성능 향상 예상치**
+
+| 최적화 기법 | 예상 성능 향상 |
+|------------|-------------|
+| **SE Block** | +2~3% |
+| **Mixup** | +1~2% |
+| **Label Smoothing** | +0.5~1% |
+| **AdamW + Scheduler** | +1~2% |
+| **강화된 Data Aug** | +1~2% |
+| **Dropout 정규화** | +0.5~1% |
+
+**총 예상 향상:** 기존 72% → **75~80%** (3~8% 향상)
+
+### **5. 핵심 차이점**
+
+**기본 ResNet18 vs SE-ResNet18:**
+- ✅ **채널 어텐션** (SE Block)
+- ✅ **적응적 정규화** (Dropout)
+- ✅ **고급 데이터 증강** (Mixup + 강화된 Transform)
+- ✅ **최적화된 훈련** (AdamW + Warmup + Label Smoothing)
+
+이런 종합적인 최적화로 CIFAR-100에서 더 높은 성능을 기대할 수 있습니다!
